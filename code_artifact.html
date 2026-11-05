@@ -1,0 +1,1044 @@
+<!DOCTYPE html>
+<html lang="ka">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ფსიქოლოგიური ქეისების პორტალი</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js for Analytics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- pdf2image / pdfjs for QEEG Page 2 extraction -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Helvetica+Neue:wght@400;600;700&display=swap');
+        body { font-family: system-ui, -apple-system, sans-serif; background-color: #f8fafc; }
+        .tab-btn.active { border-bottom: 3px solid #2563eb; color: #1d4ed8; font-weight: 700; }
+        
+        /* Print layout optimizations for PDF export */
+        @media print {
+            body { background: white !important; color: black !important; font-size: 11pt; }
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            .page-break { page-break-before: always; }
+            .shadow-lg, .shadow-md, .shadow-sm { box-shadow: none !important; }
+            .border { border-color: #cbd5e1 !important; }
+            .pdf-container { width: 100% !important; margin: 0 !important; padding: 0 !important; }
+        }
+        .print-only { display: none; }
+    </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+
+    <!-- Top Navigation Header -->
+    <header class="bg-slate-900 text-white shadow-md sticky top-0 z-50 no-print">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <i class="fa-solid fa-brain text-blue-400 text-2xl"></i>
+                <h1 class="text-xl font-bold tracking-wide">ფსიქოლოგიური ქეისების პორტალი</h1>
+            </div>
+            <div id="authStatusHeader" class="flex items-center gap-4">
+                <span id="activeTherapistBadge" class="hidden bg-blue-900 text-blue-200 text-xs px-3 py-1.5 rounded-full font-medium border border-blue-700">
+                    <i class="fa-solid fa-user-doctor mr-1"></i> <span id="therapistNameDisplay"></span>
+                </span>
+                <button id="logoutBtn" onclick="logoutTherapist()" class="hidden bg-rose-600 hover:bg-rose-700 text-white text-xs px-3 py-1.5 rounded-md font-semibold transition">
+                    <i class="fa-solid fa-lock mr-1"></i> გამოსვლა
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+        <!-- STEP 1: THERAPIST AUTHENTICATION & DASHBOARD (LANDING) -->
+        <section id="landingSection" class="space-y-8">
+            <!-- Therapist Selection Banner -->
+            <div class="bg-gradient-to-r from-blue-900 to-indigo-900 text-white rounded-2xl p-6 shadow-xl">
+                <div class="max-w-3xl">
+                    <h2 class="text-2xl font-bold mb-2">კეთილი იყოს თქვენი მობრძანება პორტალზე</h2>
+                    <p class="text-blue-200 text-sm mb-6">აირჩიეთ თერაპევტი და შეიყვანეთ 4-ნიშნა კოდი საკუთარ ქეისებთან წვდომისთვის.</p>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" id="therapistsGrid">
+                        <!-- Dynamic Therapist Cards -->
+                    </div>
+
+                    <!-- Add New Therapist Trigger -->
+                    <div class="mt-4 pt-4 border-t border-blue-800/60 flex items-center gap-3">
+                        <button onclick="toggleAddTherapistModal(true)" class="text-xs bg-blue-800/80 hover:bg-blue-700 text-blue-100 px-3 py-2 rounded-lg font-medium transition flex items-center gap-1.5">
+                            <i class="fa-solid fa-plus text-blue-300"></i> ახალი თერაპევტის დამატება
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Global Analytics & Demographic Statistics -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <h3 class="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-chart-pie text-blue-600"></i> საერთო სტატისტიკა (კლიენტები)
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <div class="bg-blue-50 border border-blue-100 rounded-xl p-4 text-center">
+                        <span class="text-xs text-blue-600 font-bold uppercase tracking-wider">სულ კლიენტები</span>
+                        <div class="text-3xl font-extrabold text-blue-900 mt-1" id="statTotalClients">0</div>
+                    </div>
+                    <div class="bg-emerald-50 border border-emerald-100 rounded-xl p-4 text-center">
+                        <span class="text-xs text-emerald-600 font-bold uppercase tracking-wider">ახალი კლიენტები (30 დღე)</span>
+                        <div class="text-3xl font-extrabold text-emerald-900 mt-1" id="statNewClients">0</div>
+                    </div>
+                    <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-center">
+                        <span class="text-xs text-indigo-600 font-bold uppercase tracking-wider">საშუალო ასაკი</span>
+                        <div class="text-3xl font-extrabold text-indigo-900 mt-1" id="statAvgAge">0</div>
+                    </div>
+                    <div class="bg-purple-50 border border-purple-100 rounded-xl p-4 text-center">
+                        <span class="text-xs text-purple-600 font-bold uppercase tracking-wider">ტესტირებების ჯამი</span>
+                        <div class="text-3xl font-extrabold text-purple-900 mt-1" id="statTotalTests">0</div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <h4 class="text-xs font-bold text-slate-500 uppercase mb-3 text-center">განაწილება სქესის მიხედვით</h4>
+                        <div class="h-48 flex justify-center">
+                            <canvas id="genderChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <h4 class="text-xs font-bold text-slate-500 uppercase mb-3 text-center">ასაკობრივი ჯგუფები</h4>
+                        <div class="h-48 flex justify-center">
+                            <canvas id="ageChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- STEP 2: THERAPIST DASHBOARD & CLIENT CASES MANAGEMENT -->
+        <section id="portalDashboard" class="hidden space-y-6">
+            <!-- Navigation Tabs & Actions -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-wrap items-center justify-between gap-4">
+                <div class="flex items-center space-x-2">
+                    <button onclick="switchTab('clientsTab')" id="tabBtnClients" class="tab-btn active px-4 py-2 text-sm font-semibold text-slate-600">
+                        <i class="fa-solid fa-users mr-2"></i> კლიენტების სია
+                    </button>
+                    <button onclick="switchTab('testFormTab')" id="tabBtnTestForm" class="tab-btn px-4 py-2 text-sm font-semibold text-slate-600">
+                        <i class="fa-solid fa-file-pen mr-2"></i> ონლაინ ტესტირება
+                    </button>
+                </div>
+                <button onclick="openNewClientModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition flex items-center gap-2">
+                    <i class="fa-solid fa-user-plus"></i> ახალი კლიენტის დამატება
+                </button>
+            </div>
+
+            <!-- TAB 1: CLIENTS LIST & DETAILED PROFILE CASE -->
+            <div id="clientsTab" class="space-y-6">
+                <!-- Clients Data Table -->
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                        <h3 class="font-bold text-slate-900">ჩემი კლიენტები</h3>
+                        <div class="relative w-64">
+                            <input type="text" id="clientSearchInput" oninput="filterClientsTable()" placeholder="ძებნა (სახელი / ID)..." class="w-full pl-9 pr-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm text-slate-600">
+                            <thead class="bg-slate-50 text-slate-700 text-xs uppercase tracking-wider font-semibold">
+                                <tr>
+                                    <th class="px-6 py-3">კოდი / ID</th>
+                                    <th class="px-6 py-3">სახელი, გვარი</th>
+                                    <th class="px-6 py-3">ასაკი</th>
+                                    <th class="px-6 py-3">სქესი</th>
+                                    <th class="px-6 py-3">ტესტების ისტორია</th>
+                                    <th class="px-6 py-3 text-right">მოქმედება</th>
+                                </tr>
+                            </thead>
+                            <tbody id="clientsTableBody" class="divide-y divide-slate-100">
+                                <!-- Dynamic Rows -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- SELECTED CLIENT CASE PROFILE VIEWER -->
+                <div id="selectedClientView" class="hidden bg-white rounded-xl shadow-md border border-slate-200 p-6 space-y-6">
+                    <div class="flex flex-wrap items-center justify-between border-b border-slate-200 pb-4 gap-4">
+                        <div>
+                            <div class="flex items-center gap-3">
+                                <h3 class="text-xl font-bold text-slate-900" id="viewClientName">-</h3>
+                                <span class="bg-slate-100 text-slate-700 text-xs font-bold px-2.5 py-1 rounded" id="viewClientCode">ID: -</span>
+                            </div>
+                            <p class="text-xs text-slate-500 mt-1">
+                                ასაკი: <span id="viewClientAge">-</span> | სქესი: <span id="viewClientGender">-</span> | თერაპევტი: <span id="viewClientTherapist">-</span>
+                            </p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <button onclick="generateFullPDFReport()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition flex items-center gap-2">
+                                <i class="fa-solid fa-file-pdf"></i> ინტერპრეტაცია & PDF ანგარიშის გენერირება
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Clinical Evaluation Notes Area -->
+                    <div class="space-y-2">
+                        <label class="block text-xs font-bold text-slate-700 uppercase tracking-wide">
+                            <i class="fa-solid fa-user-pen text-blue-600 mr-1"></i> ფსიქოლოგიური შეფასების სიტყვიერი მოკლე ახსნა (კლინიციტისტის შენიშვნები)
+                        </label>
+                        <textarea id="viewClinicalNotes" rows="3" onchange="saveClientClinicalNotes()" placeholder="შეიყვანეთ კლიენტზე დაკვირვების, ანამნეზისა და ფსიქოლოგიური შეფასების მოკლე რეზიუმე..." class="w-full p-3 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"></textarea>
+                    </div>
+
+                    <!-- QEEG Upload & Brain Wave Module -->
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-5 space-y-4">
+                        <div class="flex items-center justify-between">
+                            <h4 class="font-bold text-slate-900 flex items-center gap-2">
+                                <i class="fa-solid fa-wave-square text-indigo-600"></i> Absolute Power QEEG PRO (ტვინის რუკის ფაილი)
+                            </h4>
+                            <span class="text-xs text-slate-500">მხოლოდ მე-2 გვერდის ვიზუალი გამოიყენება დასკვნაში</span>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                            <div>
+                                <input type="file" id="qeegFileInput" accept="application/pdf,image/*" onchange="handleQEEGUpload(event)" class="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+                                <p class="text-[11px] text-slate-400 mt-1">ატვირთეთ Absolute Power QEEG PRO PDF ან სურათი.</p>
+                            </div>
+                            <div id="qeegPreviewBox" class="border border-dashed border-slate-300 rounded-lg p-2 bg-white flex justify-center items-center min-h-[100px]">
+                                <span class="text-xs text-slate-400">QEEG ფაილი არ არის ატვირთული</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Psychometric Scores Overview (Pre vs Post) -->
+                    <div>
+                        <h4 class="font-bold text-slate-900 mb-3 flex items-center gap-2">
+                            <i class="fa-solid fa-sliders text-blue-600"></i> ფსიქომეტრიული მონაცემები (სკალების მაჩვენებლები)
+                        </h4>
+                        <div id="psychometricGaugesContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <!-- Dynamic gauge cards -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: INTERACTIVE ONLINE TESTS SUITE -->
+            <div id="testFormTab" class="hidden bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-6">
+                <div class="border-b border-slate-200 pb-4">
+                    <h3 class="text-xl font-bold text-slate-900">ინტერაქტიული ონლაინ ტესტირება</h3>
+                    <p class="text-xs text-slate-500 mt-1">შეავსეთ შესაბამისი ტესტი კლიენტისთვის ქულების ავტომატური დათვლისა და შენახვისთვის.</p>
+                </div>
+
+                <!-- Test Selection Header Form -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">აირჩიეთ კლიენტი *</label>
+                        <select id="testFormClientSelect" class="w-full p-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                            <option value="">-- აირჩიეთ კლიენტი --</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">ტესტირების ეტაპი *</label>
+                        <select id="testFormStageSelect" class="w-full p-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                            <option value="pre">პრე-ტესტი (Pre-Test)</option>
+                            <option value="post">პოსტ-ტესტი (Post-Test)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">აირჩიეთ ტესტი *</label>
+                        <select id="testFormSelect" onchange="renderSelectedTestForm()" class="w-full p-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                            <option value="">-- აირჩიეთ 12 ტესტიდან --</option>
+                            <option value="PMQ9_PHQ9">1. PMQ-9 & PHQ-9 (მანია / დეპრესია)</option>
+                            <option value="GAD7">2. GAD-7 (გენერალიზებული შფოთვა)</option>
+                            <option value="asQ">3. asQ (სუიციდის რისკის სკრინინგი)</option>
+                            <option value="PHQ15">4. PHQ-15 (სომატური სიმპტომები)</option>
+                            <option value="ASRS">5. ASRS v1.1 (მოზრდილთა ADHD)</option>
+                            <option value="MSIBPD">6. MSI-BPD (მოსაზღვრე პიროვნული აშლილობა)</option>
+                            <option value="OCIR">7. OCI-R (ობსესიურ-კომპულსიური ინვენტარი)</option>
+                            <option value="ED15">8. ED-15 (კვებითი აშლილობის სკალა)</option>
+                            <option value="ITQ">9. ITQ (საერთაშორისო ტრავმის კითხვარი - PTSD/CPTSD)</option>
+                            <option value="RIS">10. RIS (რეგენსბურგის ინსომნიის სკალა)</option>
+                            <option value="AQ10">11. AQ-10 (აუტიზმის სპექტრის სკრინინგი)</option>
+                            <option value="BasicNeeds">12. Basic Needs Scale (ბაზისური მოთხოვნილებები)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Dynamic Test Items Container -->
+                <div id="activeTestContainer" class="min-h-[200px] border border-slate-200 rounded-xl p-6 bg-white">
+                    <p class="text-slate-400 text-sm text-center py-10">გთხოვთ აირჩიოთ კლიენტი და ტესტი ზემოთ მოცემული მენიუდან.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- PRINTABLE PDF REPORT CONTAINER (Rendered when requested) -->
+    <div id="printableReport" class="print-only pdf-container bg-white p-8 max-w-4xl mx-auto">
+        <!-- Header -->
+        <div class="border-b-2 border-blue-900 pb-4 mb-6 flex justify-between items-end">
+            <div>
+                <h1 class="text-2xl font-bold text-blue-900">ფსიქოლოგიური ქეისების პორტალი</h1>
+                <p class="text-xs text-slate-600 font-semibold">კლინიკური შეფასებისა და ფსიქომეტრიის ინტეგრირებული ანგარიში</p>
+            </div>
+            <div class="text-right text-xs text-slate-500">
+                <p>თარიღი: <span id="pdfDate"></span></p>
+                <p>თერაპევტი: <span id="pdfTherapist"></span></p>
+            </div>
+        </div>
+
+        <!-- Client Demographics -->
+        <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-6 grid grid-cols-4 gap-4 text-xs">
+            <div><strong>კლიენტი:</strong> <span id="pdfClientName"></span></div>
+            <div><strong>კოდი/ID:</strong> <span id="pdfClientCode"></span></div>
+            <div><strong>ასაკი:</strong> <span id="pdfClientAge"></span> წელი</div>
+            <div><strong>სქესი:</strong> <span id="pdfClientGender"></span></div>
+        </div>
+
+        <!-- Verbal Clinical Notes -->
+        <div class="mb-6">
+            <h3 class="text-sm font-bold text-slate-900 uppercase border-b border-slate-200 pb-1 mb-2">ფსიქოლოგიური შეფასება (კლინიცისტის ჩანაწერი)</h3>
+            <p id="pdfClinicalNotes" class="text-xs text-slate-700 leading-relaxed bg-slate-50 p-3 rounded border border-slate-200 italic">-</p>
+        </div>
+
+        <!-- SECTION: PSYCHOMETRIC DATA (MANDATORY TITLE) -->
+        <div class="mb-8">
+            <h2 class="text-base font-bold text-blue-900 uppercase tracking-wide border-b-2 border-blue-600 pb-1 mb-4">
+                ფსიქომეტრიული მონაცემები
+            </h2>
+            <div id="pdfPsychometricGrid" class="grid grid-cols-2 gap-4 text-xs">
+                <!-- Gauges/Scales rendered here -->
+            </div>
+        </div>
+
+        <!-- SECTION: QEEG INTERPRETATION & PAGE 2 VISUAL -->
+        <div class="page-break pt-4 mb-6">
+            <h2 class="text-base font-bold text-blue-900 uppercase tracking-wide border-b-2 border-blue-600 pb-1 mb-4">
+                Absolute Power QEEG PRO (ტვინის ელექტრული აქტივობის ანალიზი)
+            </h2>
+            
+            <!-- Page 2 QEEG Image Visual -->
+            <div class="mb-6 flex flex-col items-center border border-slate-200 p-2 rounded">
+                <span class="text-[10px] text-slate-400 mb-1">Absolute Power QEEG PRO (გვერდი 2 - ტვინის რუკა)</span>
+                <div id="pdfQEEGPage2Container" class="max-h-80 flex justify-center items-center overflow-hidden">
+                    <span class="text-xs text-slate-400 italic">QEEG ფაილის ვიზუალი არ არის ატვირთული</span>
+                </div>
+            </div>
+
+            <!-- Waves Clinical Narrative -->
+            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-3 text-xs leading-relaxed" id="pdfQEEGNarrative">
+                <!-- Auto Generated Text -->
+            </div>
+        </div>
+
+        <!-- Footer Sign-off -->
+        <div class="mt-12 pt-6 border-t border-slate-200 flex justify-between items-end text-xs text-slate-500">
+            <div>
+                <p>დოკუმენტი გენერირებულია ავტომატურად</p>
+                <p>ფსიქოლოგიური ქეისების პორტალი © 2026</p>
+            </div>
+            <div class="text-center border-t border-slate-400 pt-1 w-48">
+                <p class="font-bold text-slate-800" id="pdfTherapistSignature"></p>
+                <p class="text-[10px]">სპეციალისტის ხელმოწერა</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 1: ADD NEW THERAPIST -->
+    <div id="addTherapistModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex justify-center items-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <h3 class="text-lg font-bold text-slate-900">ახალი თერაპევტის დამატება</h3>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">სახელი და გვარი *</label>
+                <input type="text" id="newTherapistName" placeholder="მაგ: ნინო კაპანაძე" class="w-full p-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">4-ნიშნა უსაფრთხოების PIN კოდი *</label>
+                <input type="password" id="newTherapistPin" maxlength="4" placeholder="4 ციფრი" class="w-full p-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-center font-mono text-lg tracking-widest">
+            </div>
+            <div class="flex justify-end gap-3 pt-2">
+                <button onclick="toggleAddTherapistModal(false)" class="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg">გაუქმება</button>
+                <button onclick="saveNewTherapist()" class="px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow">შენახვა</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 2: PIN AUTHENTICATION PROMPT -->
+    <div id="pinAuthModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex justify-center items-center p-4">
+        <div class="bg-white rounded-2xl max-w-xs w-full p-6 shadow-2xl space-y-4 text-center">
+            <div class="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex justify-center items-center mx-auto text-xl">
+                <i class="fa-solid fa-lock"></i>
+            </div>
+            <div>
+                <h3 class="text-base font-bold text-slate-900" id="pinAuthTherapistTitle">ავტორიზაცია</h3>
+                <p class="text-xs text-slate-500 mt-1">შეიყვანეთ 4-ნიშნა PIN კოდი</p>
+            </div>
+            <input type="password" id="therapistPinInput" maxlength="4" placeholder="••••" class="w-full p-3 text-center font-mono text-2xl tracking-widest border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+            <div id="pinErrorMsg" class="hidden text-xs text-rose-600 font-medium">არასწორი PIN კოდი!</div>
+            <div class="flex justify-center gap-2 pt-2">
+                <button onclick="closePinAuthModal()" class="w-1/2 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg">გაუქმება</button>
+                <button onclick="verifyTherapistPin()" class="w-1/2 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow">შესვლა</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 3: CREATE NEW CLIENT CASE -->
+    <div id="newClientModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex justify-center items-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <h3 class="text-lg font-bold text-slate-900">ახალი კლიენტის ქეისის შექმნა</h3>
+            <form id="newClientForm" onsubmit="handleCreateClient(event)" class="space-y-3">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">სახელი, გვარი *</label>
+                    <input type="text" id="clientFormName" required placeholder="მაგ: გიორგი ბერიძე" class="w-full p-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">ასაკი *</label>
+                        <input type="number" id="clientFormAge" min="1" max="120" required placeholder="28" class="w-full p-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">სქესი *</label>
+                        <select id="clientFormGender" required class="w-full p-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                            <option value="მამრობითი">მამრობითი</option>
+                            <option value="მდედრობითი">მდედრობითი</option>
+                            <option value="სხვა">სხვა</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">კლიენტის უნიკალური კოდი / ID</label>
+                    <input type="text" id="clientFormCode" placeholder="ავტომატური ან შეიყვანეთ (მაგ: CL-902)" class="w-full p-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div class="flex justify-end gap-3 pt-2">
+                    <button type="button" onclick="closeNewClientModal()" class="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg">გაუქმება</button>
+                    <button type="submit" class="px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow">შექმნა</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MAIN JAVASCRIPT LOGIC -->
+    <script>
+        // INITIAL STATE & STORAGE KEYS
+        const STORAGE_KEY_THERAPISTS = 'psych_portal_therapists_v1';
+        const STORAGE_KEY_CLIENTS = 'psych_portal_clients_v1';
+
+        // Default fixed therapists with default 4-digit PINs (1234)
+        const DEFAULT_THERAPISTS = [
+            { id: 't1', name: 'დავით ერაძე', pin: '1234' },
+            { id: 't2', name: 'ანანო ბუბუტეიშვილი', pin: '1234' },
+            { id: 't3', name: 'გივი მახარაძე', pin: '1234' },
+            { id: 't4', name: 'ქეთი ვარდიაშვილი (ფსიქიატრი)', pin: '1234' }
+        ];
+
+        let therapists = [];
+        let clients = [];
+        let activeTherapist = null;
+        let selectedClientId = null;
+        let pendingTherapistId = null;
+
+        let genderChartInstance = null;
+        let ageChartInstance = null;
+
+        // ON APP LOAD
+        window.addEventListener('DOMContentLoaded', () => {
+            loadInitialData();
+            renderTherapistCards();
+            updateAnalyticsDashboard();
+        });
+
+        function loadInitialData() {
+            const storedT = localStorage.getItem(STORAGE_KEY_THERAPISTS);
+            therapists = storedT ? JSON.parse(storedT) : DEFAULT_THERAPISTS;
+
+            const storedC = localStorage.getItem(STORAGE_KEY_CLIENTS);
+            clients = storedC ? JSON.parse(storedC) : [];
+        }
+
+        function saveData() {
+            localStorage.setItem(STORAGE_KEY_THERAPISTS, JSON.stringify(therapists));
+            localStorage.setItem(STORAGE_KEY_CLIENTS, JSON.stringify(clients));
+            updateAnalyticsDashboard();
+        }
+
+        // --- LANDING & THERAPIST PIN AUTHENTICATION ---
+        function renderTherapistCards() {
+            const grid = document.getElementById('therapistsGrid');
+            grid.innerHTML = therapists.map(t => `
+                <button onclick="promptTherapistPin('${t.id}')" class="bg-blue-800/60 hover:bg-blue-700 border border-blue-700/50 p-4 rounded-xl text-left transition flex items-center justify-between group">
+                    <div>
+                        <div class="font-bold text-sm text-white group-hover:text-blue-200">${t.name}</div>
+                        <div class="text-[11px] text-blue-300 mt-0.5">ქეისების რაოდენობა: ${getClientsCountForTherapist(t.name)}</div>
+                    </div>
+                    <i class="fa-solid fa-chevron-right text-blue-400 text-xs group-hover:translate-x-1 transition-transform"></i>
+                </button>
+            `).join('');
+        }
+
+        function getClientsCountForTherapist(tName) {
+            return clients.filter(c => c.therapist === tName).length;
+        }
+
+        function promptTherapistPin(tId) {
+            pendingTherapistId = tId;
+            const t = therapists.find(x => x.id === tId);
+            document.getElementById('pinAuthTherapistTitle').innerText = t.name;
+            document.getElementById('therapistPinInput').value = '';
+            document.getElementById('pinErrorMsg').classList.add('hidden');
+            document.getElementById('pinAuthModal').classList.remove('hidden');
+            setTimeout(() => document.getElementById('therapistPinInput').focus(), 100);
+        }
+
+        function closePinAuthModal() {
+            document.getElementById('pinAuthModal').classList.add('hidden');
+            pendingTherapistId = null;
+        }
+
+        function verifyTherapistPin() {
+            const pinVal = document.getElementById('therapistPinInput').value;
+            const t = therapists.find(x => x.id === pendingTherapistId);
+            if (t && t.pin === pinVal) {
+                activeTherapist = t;
+                closePinAuthModal();
+                loginTherapistSuccess();
+            } else {
+                document.getElementById('pinErrorMsg').classList.remove('hidden');
+            }
+        }
+
+        function loginTherapistSuccess() {
+            document.getElementById('landingSection').classList.add('hidden');
+            document.getElementById('portalDashboard').classList.remove('hidden');
+            document.getElementById('activeTherapistBadge').classList.remove('hidden');
+            document.getElementById('logoutBtn').classList.remove('hidden');
+            document.getElementById('therapistNameDisplay').innerText = activeTherapist.name;
+
+            renderClientsTable();
+            updateTestFormClientsDropdown();
+        }
+
+        function logoutTherapist() {
+            activeTherapist = null;
+            selectedClientId = null;
+            document.getElementById('portalDashboard').classList.add('hidden');
+            document.getElementById('landingSection').classList.remove('hidden');
+            document.getElementById('activeTherapistBadge').classList.add('hidden');
+            document.getElementById('logoutBtn').classList.add('hidden');
+            document.getElementById('selectedClientView').classList.add('hidden');
+            renderTherapistCards();
+        }
+
+        function toggleAddTherapistModal(show) {
+            document.getElementById('addTherapistModal').classList.toggle('hidden', !show);
+        }
+
+        function saveNewTherapist() {
+            const name = document.getElementById('newTherapistName').value.trim();
+            const pin = document.getElementById('newTherapistPin').value.trim();
+            if (!name || pin.length !== 4) {
+                alert('გთხოვთ შეიყვანოთ ვალიდური სახელი და 4-ნიშნა PIN კოდი!');
+                return;
+            }
+            const newT = { id: 't_' + Date.now(), name: name, pin: pin };
+            therapists.push(newT);
+            saveData();
+            renderTherapistCards();
+            toggleAddTherapistModal(false);
+            document.getElementById('newTherapistName').value = '';
+            document.getElementById('newTherapistPin').value = '';
+        }
+
+        // --- GLOBAL ANALYTICS DASHBOARD ---
+        function updateAnalyticsDashboard() {
+            document.getElementById('statTotalClients').innerText = clients.length;
+            
+            // New clients in last 30 days
+            const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+            const newC = clients.filter(c => c.createdAt >= thirtyDaysAgo).length;
+            document.getElementById('statNewClients').innerText = newC;
+
+            // Average age
+            if (clients.length > 0) {
+                const avgAge = Math.round(clients.reduce((acc, c) => acc + Number(c.age), 0) / clients.length);
+                document.getElementById('statAvgAge').innerText = avgAge;
+            } else {
+                document.getElementById('statAvgAge').innerText = '0';
+            }
+
+            // Total tests taken
+            let totalTests = 0;
+            clients.forEach(c => {
+                if (c.tests) {
+                    totalTests += Object.keys(c.tests.pre || {}).length + Object.keys(c.tests.post || {}).length;
+                }
+            });
+            document.getElementById('statTotalTests').innerText = totalTests;
+
+            renderAnalyticsCharts();
+        }
+
+        function renderAnalyticsCharts() {
+            // Gender Chart
+            const males = clients.filter(c => c.gender === 'მამრობითი').length;
+            const females = clients.filter(c => c.gender === 'მდედრობითი').length;
+            const others = clients.length - (males + females);
+
+            const ctxGender = document.getElementById('genderChart').getContext('2d');
+            if (genderChartInstance) genderChartInstance.destroy();
+            genderChartInstance = new Chart(ctxGender, {
+                type: 'doughnut',
+                data: {
+                    labels: ['მამრობითი', 'მდედრობითი', 'სხვა'],
+                    datasets: [{
+                        data: [males, females, others],
+                        backgroundColor: ['#3b82f6', '#ec4899', '#94a3b8']
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+
+            // Age Chart
+            const under18 = clients.filter(c => c.age < 18).length;
+            const age18_35 = clients.filter(c => c.age >= 18 && c.age <= 35).length;
+            const age36_50 = clients.filter(c => c.age >= 36 && c.age <= 50).length;
+            const age50Plus = clients.filter(c => c.age > 50).length;
+
+            const ctxAge = document.getElementById('ageChart').getContext('2d');
+            if (ageChartInstance) ageChartInstance.destroy();
+            ageChartInstance = new Chart(ctxAge, {
+                type: 'bar',
+                data: {
+                    labels: ['<18', '18-35', '36-50', '50+'],
+                    datasets: [{
+                        label: 'კლიენტების რაოდენობა',
+                        data: [under18, age18_35, age36_50, age50Plus],
+                        backgroundColor: '#6366f1'
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+        }
+
+        // --- DASHBOARD NAVIGATION ---
+        function switchTab(tabId) {
+            document.getElementById('clientsTab').classList.toggle('hidden', tabId !== 'clientsTab');
+            document.getElementById('testFormTab').classList.toggle('hidden', tabId !== 'testFormTab');
+            document.getElementById('tabBtnClients').classList.toggle('active', tabId === 'clientsTab');
+            document.getElementById('tabBtnTestForm').classList.toggle('active', tabId === 'testFormTab');
+        }
+
+        // --- CLIENT MANAGEMENT ---
+        function openNewClientModal() {
+            document.getElementById('newClientModal').classList.remove('hidden');
+        }
+        function closeNewClientModal() {
+            document.getElementById('newClientModal').classList.add('hidden');
+        }
+
+        function handleCreateClient(e) {
+            e.preventDefault();
+            const name = document.getElementById('clientFormName').value.trim();
+            const age = document.getElementById('clientFormAge').value;
+            const gender = document.getElementById('clientFormGender').value;
+            let code = document.getElementById('clientFormCode').value.trim();
+            if (!code) code = 'CL-' + Math.floor(100 + Math.random() * 900);
+
+            const newClient = {
+                id: 'c_' + Date.now(),
+                name,
+                age,
+                gender,
+                code,
+                therapist: activeTherapist.name,
+                createdAt: Date.now(),
+                clinicalNotes: '',
+                qeegPage2DataUrl: null,
+                tests: { pre: {}, post: {} }
+            };
+
+            clients.push(newClient);
+            saveData();
+            closeNewClientModal();
+            document.getElementById('newClientForm').reset();
+            renderClientsTable();
+            updateTestFormClientsDropdown();
+            selectClientForView(newClient.id);
+        }
+
+        function renderClientsTable() {
+            const tbody = document.getElementById('clientsTableBody');
+            const filtered = clients.filter(c => c.therapist === activeTherapist.name);
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-8 text-center text-slate-400">თერაპევტს ჯერ არ ჰყავს დამატებული კლიენტები.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(c => {
+                const preCount = Object.keys(c.tests?.pre || {}).length;
+                const postCount = Object.keys(c.tests?.post || {}).length;
+                return `
+                    <tr class="hover:bg-slate-50 transition cursor-pointer" onclick="selectClientForView('${c.id}')">
+                        <td class="px-6 py-4 font-mono font-bold text-blue-600">${c.code}</td>
+                        <td class="px-6 py-4 font-semibold text-slate-900">${c.name}</td>
+                        <td class="px-6 py-4">${c.age}</td>
+                        <td class="px-6 py-4">${c.gender}</td>
+                        <td class="px-6 py-4">
+                            <span class="bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded font-medium">Pre: ${preCount}</span>
+                            <span class="bg-emerald-50 text-emerald-700 text-xs px-2 py-1 rounded font-medium ml-1">Post: ${postCount}</span>
+                        </td>
+                        <td class="px-6 py-4 text-right">
+                            <button onclick="event.stopPropagation(); selectClientForView('${c.id}')" class="text-xs bg-slate-100 hover:bg-blue-600 hover:text-white px-3 py-1.5 rounded font-medium transition">
+                                ქეისის ნახვა
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function filterClientsTable() {
+            const term = document.getElementById('clientSearchInput').value.toLowerCase();
+            const rows = document.querySelectorAll('#clientsTableBody tr');
+            rows.forEach(r => {
+                const text = r.innerText.toLowerCase();
+                r.style.display = text.includes(term) ? '' : 'none';
+            });
+        }
+
+        function selectClientForView(cId) {
+            selectedClientId = cId;
+            const c = clients.find(x => x.id === cId);
+            if (!c) return;
+
+            document.getElementById('selectedClientView').classList.remove('hidden');
+            document.getElementById('viewClientName').innerText = c.name;
+            document.getElementById('viewClientCode').innerText = `ID: ${c.code}`;
+            document.getElementById('viewClientAge').innerText = c.age;
+            document.getElementById('viewClientGender').innerText = c.gender;
+            document.getElementById('viewClientTherapist').innerText = c.therapist;
+            document.getElementById('viewClinicalNotes').value = c.clinicalNotes || '';
+
+            renderQEEGPreviewBox(c.qeegPage2DataUrl);
+            renderPsychometricGauges(c);
+        }
+
+        function saveClientClinicalNotes() {
+            if (!selectedClientId) return;
+            const c = clients.find(x => x.id === selectedClientId);
+            if (c) {
+                c.clinicalNotes = document.getElementById('viewClinicalNotes').value;
+                saveData();
+            }
+        }
+
+        function updateTestFormClientsDropdown() {
+            const sel = document.getElementById('testFormClientSelect');
+            const myClients = clients.filter(c => c.therapist === activeTherapist.name);
+            sel.innerHTML = `<option value="">-- აირჩიეთ კლიენტი --</option>` +
+                myClients.map(c => `<option value="${c.id}">${c.name} (${c.code})</option>`).join('');
+        }
+
+        // --- QEEG PAGE 2 UPLOAD & PROCESSING MODULE ---
+        function renderQEEGPreviewBox(dataUrl) {
+            const box = document.getElementById('qeegPreviewBox');
+            if (dataUrl) {
+                box.innerHTML = `<img src="${dataUrl}" class="max-h-32 object-contain rounded border" alt="QEEG Page 2">`;
+            } else {
+                box.innerHTML = `<span class="text-xs text-slate-400">QEEG ფაილი არ არის ატვირთული</span>`;
+            }
+        }
+
+        async function handleQEEGUpload(e) {
+            const file = e.target.files[0];
+            if (!file || !selectedClientId) return;
+            const c = clients.find(x => x.id === selectedClientId);
+
+            if (file.type === 'application/pdf') {
+                try {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                    
+                    // Render page 2 or page 1 fallback
+                    const pageNum = pdf.numPages >= 2 ? 2 : 1;
+                    const page = await pdf.getPage(pageNum);
+                    
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    const viewport = page.getViewport({ scale: 1.5 });
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+
+                    await page.render({ canvasContext: context, viewport: viewport }).promise;
+                    const dataUrl = canvas.toDataURL('image/png');
+                    
+                    c.qeegPage2DataUrl = dataUrl;
+                    saveData();
+                    renderQEEGPreviewBox(dataUrl);
+                } catch (err) {
+                    alert('PDF გვერდის გენერირების შეცდომა: ' + err.message);
+                }
+            } else if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    c.qeegPage2DataUrl = evt.target.result;
+                    saveData();
+                    renderQEEGPreviewBox(c.qeegPage2DataUrl);
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // --- PSYCHOMETRIC TESTS DEFINITION & CUT-OFFS (GREEN/YELLOW/RED) ---
+        const TEST_METADATA = {
+            PMQ9_PHQ9: { name: 'PMQ-9 & PHQ-9 (მანია/დეპრესია)', cutoff: 10, max: 27 },
+            GAD7: { name: 'GAD-7 (შფოთვა)', cutoff: 10, max: 21 },
+            asQ: { name: 'asQ (სუიციდის რისკი)', cutoff: 1, max: 4, isCategorical: true },
+            PHQ15: { name: 'PHQ-15 (სომატური სიმპტომები)', cutoff: 10, max: 30 },
+            ASRS: { name: 'ASRS v1.1 (ADHD Part A)', cutoff: 14, max: 24 },
+            MSIBPD: { name: 'MSI-BPD (მოსაზღვრე BPD)', cutoff: 7, max: 10 },
+            OCIR: { name: 'OCI-R (OCD სუბსკალა)', cutoff: 12, max: 60 },
+            ED15: { name: 'ED-15 (კვებითი აშლილობა)', cutoff: 2.1, max: 6 },
+            ITQ: { name: 'ITQ (PTSD/CPTSD)', cutoff: 2, max: 24, isCategorical: true },
+            RIS: { name: 'RIS (ინსომნიის სკალა)', cutoff: 13, max: 40 },
+            AQ10: { name: 'AQ-10 (აუტიზმის სპექტრი)', cutoff: 6, max: 10 },
+            BasicNeeds: { name: 'Basic Needs Scale (ბაზისური მოთხოვნილებები)', cutoff: 5, max: 10, isReverse: true }
+        };
+
+        function getScoreColorClass(score, metadata) {
+            if (metadata.isReverse) { // For basic needs, higher score is healthier
+                if (score >= 8) return { bg: 'bg-emerald-500', text: 'text-emerald-700', label: 'მაღალი/კმაყოფილი' };
+                if (score >= 5) return { bg: 'bg-amber-500', text: 'text-amber-700', label: 'ზომიერი' };
+                return { bg: 'bg-rose-500', text: 'text-rose-700', label: 'დაბალი' };
+            }
+            if (score >= metadata.cutoff) return { bg: 'bg-rose-500', text: 'text-rose-700', label: 'კლინიკური Cut-off' };
+            if (score >= metadata.cutoff * 0.6) return { bg: 'bg-amber-500', text: 'text-amber-700', label: 'ზომიერი' };
+            return { bg: 'bg-emerald-500', text: 'text-emerald-700', label: 'ნორმა/მინიმალური' };
+        }
+
+        function renderPsychometricGauges(client) {
+            const container = document.getElementById('psychometricGaugesContainer');
+            const preTests = client.tests?.pre || {};
+            const postTests = client.tests?.post || {};
+
+            const allKeys = Array.from(new Set([...Object.keys(preTests), ...Object.keys(postTests)]));
+            if (allKeys.length === 0) {
+                container.innerHTML = `<div class="col-span-full text-center py-6 text-slate-400 text-xs italic">კლიენტს ჯერ არ გაუვლია ონლაინ ტესტები.</div>`;
+                return;
+            }
+
+            container.innerHTML = allKeys.map(key => {
+                const meta = TEST_METADATA[key] || { name: key, cutoff: 10, max: 20 };
+                const preVal = preTests[key] !== undefined ? preTests[key] : '-';
+                const postVal = postTests[key] !== undefined ? postTests[key] : '-';
+
+                const preColor = typeof preVal === 'number' ? getScoreColorClass(preVal, meta) : { text: 'text-slate-400', label: '' };
+                const postColor = typeof postVal === 'number' ? getScoreColorClass(postVal, meta) : { text: 'text-slate-400', label: '' };
+
+                return `
+                    <div class="bg-white border border-slate-200 rounded-lg p-4 space-y-2 shadow-sm">
+                        <div class="font-bold text-xs text-slate-900 border-b border-slate-100 pb-1.5">${meta.name}</div>
+                        <div class="grid grid-cols-2 gap-2 text-xs pt-1">
+                            <div class="bg-slate-50 p-2 rounded">
+                                <span class="text-[10px] text-slate-400 block font-bold uppercase">Pre-Test</span>
+                                <span class="text-base font-extrabold ${preColor.text}">${preVal}</span>
+                                <span class="text-[10px] block text-slate-500">${preColor.label}</span>
+                            </div>
+                            <div class="bg-slate-50 p-2 rounded">
+                                <span class="text-[10px] text-slate-400 block font-bold uppercase">Post-Test</span>
+                                <span class="text-base font-extrabold ${postColor.text}">${postVal}</span>
+                                <span class="text-[10px] block text-slate-500">${postColor.label}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // --- INTERACTIVE TEST BUILDER ENGINE ---
+        function renderSelectedTestForm() {
+            const testKey = document.getElementById('testFormSelect').value;
+            const container = document.getElementById('activeTestContainer');
+            if (!testKey) {
+                container.innerHTML = `<p class="text-slate-400 text-sm text-center py-10">გთხოვთ აირჩიოთ ტესტი.</p>`;
+                return;
+            }
+
+            let html = `<form onsubmit="submitTestForm(event, '${testKey}')" class="space-y-6">`;
+            html += `<h4 class="font-bold text-base text-blue-900 border-b pb-2">${TEST_METADATA[testKey].name}</h4>`;
+
+            // Render simple dynamic questions depending on scale
+            if (testKey === 'GAD7') {
+                const qList = [
+                    'ნერვიულობის, შფოთვის ან ზღვარზე ყოფნის შეგრძნება',
+                    'ნერვიულობის შეჩერების ან კონტროლის შეუძლებლობა',
+                    'სხვადასხვა საკითხებზე გადაჭარბებული ნერვიულობა',
+                    'მოდუნების/მოსვენების სიძნელე',
+                    'ისეთი მოუსვენრობა, რომ ერთ ადგილზე ჯდომა ჭირს',
+                    'ადვილად გაღიზიანება ან განრისხება',
+                    'შიშის შეგრძნება, თითქოს რაღაც საშინელება უნდა მოხდეს'
+                ];
+                html += qList.map((q, idx) => `
+                    <div class="space-y-1">
+                        <p class="text-xs font-semibold text-slate-800">${idx+1}. ${q}</p>
+                        <div class="flex gap-4 text-xs">
+                            <label><input type="radio" name="g7_${idx}" value="0" required> 0 (არასდროს)</label>
+                            <label><input type="radio" name="g7_${idx}" value="1"> 1 (რამდენიმე დღე)</label>
+                            <label><input type="radio" name="g7_${idx}" value="2"> 2 (ნახევარზე მეტი)</label>
+                            <label><input type="radio" name="g7_${idx}" value="3"> 3 (თითქმის ყოველდღე)</label>
+                        </div>
+                    </div>
+                `).join('');
+            } else if (testKey === 'PMQ9_PHQ9') {
+                html += `
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">PHQ-9 დეპრესიის ჯამური ქულა (0-27):</label>
+                            <input type="number" id="input_phq9" min="0" max="27" required class="w-32 p-2 border rounded text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">PMQ-9 მანიაკალური სიმპტომების ქულა (0-27):</label>
+                            <input type="number" id="input_pmq9" min="0" max="27" required class="w-32 p-2 border rounded text-sm">
+                        </div>
+                    </div>
+                `;
+            } else if (testKey === 'BasicNeeds') {
+                const needs = ['1. გადარჩენა', '2. სიყვარული და მიკუთვნებულობა', '3. ძალაუფლება/კონტროლი', '4. თავისუფლება', '5. გართობა'];
+                html += needs.map((n, idx) => `
+                    <div class="space-y-1">
+                        <label class="block text-xs font-bold text-slate-800">${n} (საშუალო ქულა 1-10):</label>
+                        <input type="number" id="bn_${idx}" min="1" max="10" step="0.1" required class="w-32 p-2 border rounded text-sm">
+                    </div>
+                `).join('');
+            } else {
+                // General score numeric entry fallback for brevity & full scale support
+                html += `
+                    <div class="space-y-3">
+                        <p class="text-xs text-slate-500">შეიყვანეთ ტესტირების შედეგად მიღებული ჯამური ქულა:</p>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">ჯამური ქულა (მაქსიმუმ: ${TEST_METADATA[testKey].max}):</label>
+                            <input type="number" id="general_test_score" step="0.1" min="0" max="${TEST_METADATA[testKey].max}" required class="w-40 p-2.5 border rounded-lg text-sm font-bold">
+                        </div>
+                    </div>
+                `;
+            }
+
+            html += `
+                <div class="pt-4 border-t">
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-5 py-2.5 rounded-lg shadow">
+                        შედეგების გაგზავნა / შენახვა ქეისში
+                    </button>
+                </div>
+            </form>`;
+
+            container.innerHTML = html;
+        }
+
+        function submitTestForm(e, testKey) {
+            e.preventDefault();
+            const cId = document.getElementById('testFormClientSelect').value;
+            const stage = document.getElementById('testFormStageSelect').value;
+            if (!cId) {
+                alert('გთხოვთ აირჩიოთ კლიენტი!');
+                return;
+            }
+
+            const c = clients.find(x => x.id === cId);
+            if (!c) return;
+
+            let finalScore = 0;
+            if (testKey === 'GAD7') {
+                for (let i = 0; i < 7; i++) {
+                    const sel = document.querySelector(`input[name="g7_${i}"]:checked`);
+                    if (sel) finalScore += Number(sel.value);
+                }
+            } else if (testKey === 'PMQ9_PHQ9') {
+                finalScore = Number(document.getElementById('input_phq9').value);
+            } else if (testKey === 'BasicNeeds') {
+                let sum = 0;
+                for (let i = 0; i < 5; i++) {
+                    sum += Number(document.getElementById(`bn_${i}`).value);
+                }
+                finalScore = Number((sum / 5).toFixed(1));
+            } else {
+                finalScore = Number(document.getElementById('general_test_score').value);
+            }
+
+            if (!c.tests) c.tests = { pre: {}, post: {} };
+            if (!c.tests[stage]) c.tests[stage] = {};
+            c.tests[stage][testKey] = finalScore;
+
+            saveData();
+            alert(`შედეგები წარმატებით შენახულია ${stage === 'pre' ? 'Pre-Test' : 'Post-Test'} ეტაპზე!`);
+            switchTab('clientsTab');
+            selectClientForView(c.id);
+        }
+
+        // --- CLINICAL REPORT & PDF GENERATION ---
+        function generateFullPDFReport() {
+            if (!selectedClientId) return;
+            const c = clients.find(x => x.id === selectedClientId);
+            if (!c) return;
+
+            // Fill PDF static metadata
+            document.getElementById('pdfDate').innerText = new Date().toLocaleDateString('ka-GE');
+            document.getElementById('pdfTherapist').innerText = activeTherapist.name;
+            document.getElementById('pdfTherapistSignature').innerText = activeTherapist.name;
+            document.getElementById('pdfClientName').innerText = c.name;
+            document.getElementById('pdfClientCode').innerText = c.code;
+            document.getElementById('pdfClientAge').innerText = c.age;
+            document.getElementById('pdfClientGender').innerText = c.gender;
+            document.getElementById('pdfClinicalNotes').innerText = c.clinicalNotes || 'შენიშვნა არ არის შეყვანილი.';
+
+            // Render Psychometric Gauges grid inside PDF
+            const pdfGrid = document.getElementById('pdfPsychometricGrid');
+            const preTests = c.tests?.pre || {};
+            const postTests = c.tests?.post || {};
+            const allKeys = Array.from(new Set([...Object.keys(preTests), ...Object.keys(postTests)]));
+
+            if (allKeys.length === 0) {
+                pdfGrid.innerHTML = `<p class="col-span-2 text-slate-400 italic">ფსიქომეტრიული მონაცემები არ არის ხელმისაწვდომი.</p>`;
+            } else {
+                pdfGrid.innerHTML = allKeys.map(k => {
+                    const meta = TEST_METADATA[k] || { name: k, cutoff: 10 };
+                    const preVal = preTests[k] !== undefined ? preTests[k] : '-';
+                    const postVal = postTests[k] !== undefined ? postTests[k] : '-';
+
+                    return `
+                        <div class="border border-slate-200 p-2.5 rounded bg-slate-50">
+                            <div class="font-bold text-slate-800 border-b border-slate-200 pb-1 mb-1">${meta.name}</div>
+                            <div class="flex justify-between items-center text-[11px]">
+                                <span>Pre-Test: <strong>${preVal}</strong></span>
+                                <span>Post-Test: <strong>${postVal}</strong></span>
+                                <span class="text-[10px] text-slate-500 font-semibold">(Cut-off: ${meta.cutoff})</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            // QEEG Page 2 Visual Transfer
+            const pdfQeegBox = document.getElementById('pdfQEEGPage2Container');
+            if (c.qeegPage2DataUrl) {
+                pdfQeegBox.innerHTML = `<img src="${c.qeegPage2DataUrl}" class="max-h-72 object-contain" alt="QEEG Page 2">`;
+            } else {
+                pdfQeegBox.innerHTML = `<span class="text-xs text-slate-400 italic">QEEG ფაილის ვიზუალი არ არის ატვირთული</span>`;
+            }
+
+            // Synthesize QEEG Waves Narrative using mandatory clinical phrase
+            document.getElementById('pdfQEEGNarrative').innerHTML = `
+                <p><strong>Absolute Power QEEG PRO ტვინის ტალღების კლინიკური ანალიზი:</strong></p>
+                <ul class="list-disc pl-4 space-y-1 text-slate-700">
+                    <li><strong>დელტა ტალღები (0.5 - 4 Hz):</strong> ქერქული აქტივობის ცვლილება. <em>შესაძლოა ასოცირდებოდეს / ვლინდებოდეს</em> NREM ძილის დარღვევებით, ქრონიკული დაღლილობით ან კორტიკალური შენელებით.</li>
+                    <li><strong>თეტა ტალღები (4 - 8 Hz):</strong> ფრონტო-ცენტრალური რიტმის მაჩვენებელი. <em>შესაძლოა ასოცირდებოდეს / ვლინდებოდეს</em> ყურადღების დეფიციტით (ADHD Theta/Beta ფარდობა), მუშა მეხსიერების დატვირთვით ან შფოთვით.</li>
+                    <li><strong>ალფა ტალღები (8 - 12 Hz):</strong> მოსვენების რიტმი (კეფა/საფეთქელი). <em>შესაძლოა ასოცირდებოდეს / ვლინდებოდეს</em> ფრონტალური ასიმეტრიით, გუნება-განწყობის დაქვეითებით ან მოსვენების მდგომარეობაში გადასვლის სირთულეებით.</li>
+                    <li><strong>ბეტა ტალღები (15 - 30 Hz):</strong> კოგნიტური აგზნების მარკერი. <em>შესაძლოა ასოცირდებოდეს / ვლინდებოდეს</em> High Beta ჰიპერაროუზალით, ობსესიური აზრებით, შფოთვით ან კუნთოვანი დაჭიმულობის არტეფაქტებით.</li>
+                </ul>
+            `;
+
+            // Trigger browser print menu for clean PDF save
+            window.print();
+        }
+    </script>
+</body>
+</html>
